@@ -15,12 +15,12 @@ def dtanh(y):
   return 0.25 * (1.0 - y**2)
 
 class NeuralNet:
-  def __init__(self, layers, train_alg='rprop', func='binary'):
+  def __init__(self, layers, train_alg='rprop', func='binary', learning_rate=0.7):
     self.w = []
     self.train_alg = train_alg
     for i in xrange(len(layers) - 1):
       self.w.append(0.1 * (2 * np.random.rand(layers[i] + 1, layers[i + 1]) - 1))
-    self.learning_rate = 0.7
+    self.learning_rate = learning_rate
     if func == 'bipolar':
       self.func = tanh
       self.dfunc = dtanh
