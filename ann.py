@@ -38,13 +38,16 @@ class NeuralNet:
         self.delta_prev.append(0.0125 * np.ones(self.w[i].shape))
         self.delta_w_prev.append(np.zeros(self.w[i].shape))
       self.mse_prev = 0
+    self.neurons = []
+    for i in xrange(len(layers) - 1):
+      self.neurons.append(np.ones(layers[i] + 1))
+    self.neurons.append(np.zeros(layers[-1]))
 
   def update(self, X):
-    self.neurons = [X]
-    for i in xrange(len(self.w)):
-      self.neurons[i] = np.append(self.neurons[i], 1.0)
-      self.neurons.append(self.func(self.neurons[i].dot(self.w[i])))
-    return self.neurons[-1]
+    self.neurons[0][0:-1] = X
+    for i in xrange(len(self.w) - 1):
+      self.neurons[i + 1][0:-1] = self.func(self.neurons[i].dot(self.w[i]))
+    self.neurons[-1] = self.func(self.neurons[-2].dot(self.w[-1]))
 
   def get_MSE(self):
     return self.mse / 4 if self.func == tanh else self.mse
@@ -71,10 +74,11 @@ class NeuralNet:
       n_neg = 0.5
     size = X.shape[0]
     mse_sum = 0
+    d0 = [[]] * len(self.w)
     for i in xrange(size):
       self.update(X[i])
       mse_sum += mean_squared_error(Y[i], self.neurons[-1])
-      d = [[]] * len(self.w)
+      d = d0
       d[-1] = np.atleast_2d((Y[i] - self.neurons[-1]) * self.dfunc(self.neurons[-1]))
       for j in xrange(len(self.w) - 1, 0, -1):
         d[j - 1] = (d[j].dot(self.w[j].T) * self.dfunc(self.neurons[j]))[:, 0:-1]
@@ -111,6 +115,6 @@ class NeuralNet:
     size = X.shape[0]
     mse_sum = 0
     for i in xrange(size):
-      output = self.update(X[i])
-      mse_sum += mean_squared_error(Y[i], output)
+      self.update(X[i])
+      mse_sum += mean_squared_error(Y[i], self.neurons[-1])
     self.mse = mse_sum / size
