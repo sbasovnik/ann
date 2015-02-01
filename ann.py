@@ -1,6 +1,6 @@
 import numpy as np
 from sklearn.metrics import mean_squared_error
-from math import log
+from math import log, sqrt
 
 def sigmoid(x):
   return 1.0 / (1.0 + np.exp(-x))
@@ -19,7 +19,8 @@ class NeuralNet:
     self.w = []
     self.train_alg = train_alg
     for i in xrange(len(layers) - 1):
-      self.w.append(0.1 * (2 * np.random.rand(layers[i] + 1, layers[i + 1]) - 1))
+      r = sqrt(6) / sqrt(layers[i] + layers[i + 1] + 1)
+      self.w.append(r * (2 * np.random.rand(layers[i] + 1, layers[i + 1]) - 1))
     self.learning_rate = learning_rate
     if func == 'bipolar':
       self.func = tanh
@@ -42,6 +43,14 @@ class NeuralNet:
     for i in xrange(len(layers) - 1):
       self.neurons.append(np.ones(layers[i] + 1))
     self.neurons.append(np.zeros(layers[-1]))
+
+  @staticmethod
+  def from_weights(w, train_alg='rprop', func='binary', learning_rate=0.7):
+    layers = tuple([x.shape[0] - 1 for x in w])
+    layers = layers + (w[-1].shape[1],)
+    nn = NeuralNet(layers, train_alg, func, learning_rate)
+    nn.w = w
+    return nn
 
   def update(self, X):
     self.neurons[0][0:-1] = X
