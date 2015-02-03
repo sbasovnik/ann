@@ -53,18 +53,18 @@ class NeuralNet:
     return nn
 
   def update(self, X):
-    self.neurons[0][0:-1] = X
-    for i in xrange(len(self.w) - 1):
-      self.neurons[i + 1][0:-1] = self.func(self.neurons[i].dot(self.w[i]))
-    self.neurons[-1] = self.func(self.neurons[-2].dot(self.w[-1]))
+    self.neurons[0] = X
+    for i in xrange(len(self.w)):
+      self.neurons[i] = np.append(self.neurons[i], np.ones((len(self.neurons[i]), 1)), 1)
+      self.neurons[i + 1] = self.func(self.neurons[i].dot(self.w[i]))
 
   def get_MSE(self):
     return self.mse / 4 if self.func == tanh else self.mse
 
   def train_epoch(self, X, Y):
-    if self.train_alg == 'backprop':
+    if self.train_alg == 'iter':
       return self.train_backprop(X, Y)
-    elif self.train_alg == 'backprop_batch':
+    elif self.train_alg == 'batch':
       return self.train_backprop(X, Y, batch=True)
     elif self.train_alg == 'rprop':
       return self.train_backprop(X, Y, rprop=True)
@@ -73,57 +73,59 @@ class NeuralNet:
 
   def train_backprop(self, X, Y, batch=False, rprop=False):
     if batch or rprop:
-      dEw_sum = []
+      dEw = []
       for i in xrange(len(self.w)):
-        dEw_sum.append(np.zeros(self.w[i].shape))
+        dEw.append(np.zeros(self.w[i].shape))
     if rprop:
       delta_max = 50.0
       delta_min = 0.0
       n_pos = 1.2
       n_neg = 0.5
     size = X.shape[0]
-    mse_sum = 0
     d0 = [[]] * len(self.w)
-    for i in xrange(size):
-      self.update(X[i])
-      mse_sum += mean_squared_error(Y[i], self.neurons[-1])
+    if batch or rprop:
+      self.update(X)
+      self.mse = mean_squared_error(Y, self.neurons[-1])
       d = d0
-      d[-1] = np.atleast_2d((Y[i] - self.neurons[-1]) * self.dfunc(self.neurons[-1]))
+      d[-1] = np.atleast_2d((Y - self.neurons[-1]) * self.dfunc(self.neurons[-1]))
       for j in xrange(len(self.w) - 1, 0, -1):
         d[j - 1] = (d[j].dot(self.w[j].T) * self.dfunc(self.neurons[j]))[:, 0:-1]
       for j in xrange(len(self.w)):
-        dEw = np.atleast_2d(self.neurons[j]).T.dot(d[j])
-        if batch or rprop:
-          dEw_sum[j] += dEw
-        else:
-          self.w[j] += self.learning_rate * dEw
-    self.mse = mse_sum / size
+        dEw[j] = np.atleast_2d(self.neurons[j]).T.dot(d[j])
+    else:
+      mse_sum = 0
+      for i in xrange(size):
+        self.update([X[i]])
+        mse_sum += mean_squared_error(Y[i], self.neurons[-1][0])
+        d = d0
+        d[-1] = np.atleast_2d((Y[i] - self.neurons[-1]) * self.dfunc(self.neurons[-1]))
+        for j in xrange(len(self.w) - 1, 0, -1):
+          d[j - 1] = (d[j].dot(self.w[j].T) * self.dfunc(self.neurons[j]))[:, 0:-1]
+        for j in xrange(len(self.w)):
+          self.w[j] += self.learning_rate * np.atleast_2d(self.neurons[j]).T.dot(d[j])
+      self.mse = mse_sum / size
     if batch:
       for j in xrange(len(self.w)):
-        self.w[j] += self.learning_rate * (log(size) / size) * dEw_sum[j]
+        self.w[j] += self.learning_rate / size * dEw[j]
     if rprop:
       for j in xrange(len(self.w)):
         # iRPROP+
-        same_sign = dEw_sum[j] * self.dEw_prev[j] > 0
-        opposite_sign = dEw_sum[j] * self.dEw_prev[j] < 0
-        zero_sign = dEw_sum[j] * self.dEw_prev[j] == 0
+        same_sign = dEw[j] * self.dEw_prev[j] > 0
+        opposite_sign = dEw[j] * self.dEw_prev[j] < 0
+        zero_sign = dEw[j] * self.dEw_prev[j] == 0
         delta = np.clip(
           same_sign * self.delta_prev[j] * n_pos + \
           opposite_sign * self.delta_prev[j] * n_neg + \
           zero_sign * self.delta_prev[j], delta_min, delta_max)
-        delta_w = (same_sign | zero_sign) * np.sign(dEw_sum[j]) * delta + \
+        delta_w = (same_sign | zero_sign) * np.sign(dEw[j]) * delta + \
           (opposite_sign & (self.mse > self.mse_prev)) * -self.delta_w_prev[j]
-        dEw_sum[j] -= opposite_sign * dEw_sum[j]
-        self.w[j] = delta_w
-        self.dEw_prev[j] = dEw_sum[j]
+        dEw[j][opposite_sign] = 0
+        self.w[j] += delta_w
+        self.dEw_prev[j] = dEw[j]
         self.delta_prev[j] = delta
         self.delta_w_prev[j] = delta_w
       self.mse_prev = self.mse
 
   def test(self, X, Y):
-    size = X.shape[0]
-    mse_sum = 0
-    for i in xrange(size):
-      self.update(X[i])
-      mse_sum += mean_squared_error(Y[i], self.neurons[-1])
-    self.mse = mse_sum / size
+    self.update(X)
+    self.mse = mean_squared_error(Y, self.neurons[-1])
