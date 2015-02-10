@@ -15,13 +15,15 @@ def dtanh(y):
   return 0.25 * (1.0 - y**2)
 
 class NeuralNet:
-  def __init__(self, layers, train_alg='rprop', func='binary', learning_rate=0.7):
+  def __init__(self, layers, train_alg='rprop', func='binary', learning_rate=0.7, l1=0.0, l2=0.0):
     self.w = []
     self.train_alg = train_alg
     for i in xrange(len(layers) - 1):
       r = sqrt(6) / sqrt(layers[i] + layers[i + 1] + 1)
       self.w.append(r * (2 * np.random.rand(layers[i] + 1, layers[i + 1]) - 1))
     self.learning_rate = learning_rate
+    self.l1 = l1
+    self.l2 = l2
     if func == 'bipolar':
       self.func = tanh
       self.dfunc = dtanh
@@ -62,28 +64,18 @@ class NeuralNet:
     return self.mse / 4 if self.func == tanh else self.mse
 
   def train_epoch(self, X, Y):
-    if self.train_alg == 'iter':
-      return self.train_backprop(X, Y)
-    elif self.train_alg == 'batch':
-      return self.train_backprop(X, Y, batch=True)
-    elif self.train_alg == 'rprop':
-      return self.train_backprop(X, Y, rprop=True)
-    else:
-      raise Exception('Unknown training algorithm.')
-
-  def train_backprop(self, X, Y, batch=False, rprop=False):
-    if batch or rprop:
+    if self.train_alg == 'batch' or self.train_alg == 'rprop':
       dEw = []
       for i in xrange(len(self.w)):
         dEw.append(np.zeros(self.w[i].shape))
-    if rprop:
+    if self.train_alg == 'rprop':
       delta_max = 50.0
-      delta_min = 0.0
+      delta_min = 0.0001
       n_pos = 1.2
       n_neg = 0.5
     size = X.shape[0]
     d0 = [[]] * len(self.w)
-    if batch or rprop:
+    if self.train_alg == 'batch' or self.train_alg == 'rprop':
       self.update(X)
       self.mse = mean_squared_error(Y, self.neurons[-1])
       d = d0
@@ -91,7 +83,7 @@ class NeuralNet:
       for j in xrange(len(self.w) - 1, 0, -1):
         d[j - 1] = (d[j].dot(self.w[j].T) * self.dfunc(self.neurons[j]))[:, 0:-1]
       for j in xrange(len(self.w)):
-        dEw[j] = np.atleast_2d(self.neurons[j]).T.dot(d[j])
+        dEw[j] = np.atleast_2d(self.neurons[j]).T.dot(d[j]) - self.l2 * self.w[j] - self.l1 * np.sign(self.w[j])
     else:
       mse_sum = 0
       for i in xrange(size):
@@ -102,12 +94,12 @@ class NeuralNet:
         for j in xrange(len(self.w) - 1, 0, -1):
           d[j - 1] = (d[j].dot(self.w[j].T) * self.dfunc(self.neurons[j]))[:, 0:-1]
         for j in xrange(len(self.w)):
-          self.w[j] += self.learning_rate * np.atleast_2d(self.neurons[j]).T.dot(d[j])
+          self.w[j] += self.learning_rate * (np.atleast_2d(self.neurons[j]).T.dot(d[j]) - self.l2 * self.w[j] - self.l1 * np.sign(self.w[j]))
       self.mse = mse_sum / size
-    if batch:
+    if self.train_alg == 'batch':
       for j in xrange(len(self.w)):
         self.w[j] += self.learning_rate / size * dEw[j]
-    if rprop:
+    if self.train_alg == 'rprop':
       for j in xrange(len(self.w)):
         # iRPROP+
         same_sign = dEw[j] * self.dEw_prev[j] > 0
